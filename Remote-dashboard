@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Device Remote Dashboard</title>
+  <style>
+    :root {
+      --bg: linear-gradient(180deg, #f2f6f4 0%, #ffffff 100%);
+      --panel: rgba(255, 255, 255, 0.92);
+      --text: #173126;
+      --muted: #5f776c;
+      --border: rgba(23, 49, 38, 0.1);
+      --shadow: 0 20px 50px rgba(24, 52, 39, 0.12);
+      --green: #1f9d5b;
+      --red: #d84c4c;
+      --amber: #efab3b;
+      --radius: 22px;
+      --radius-sm: 14px;
+      --font: "Segoe UI", "Trebuchet MS", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      color: var(--text);
+      background: var(--bg);
+      padding: 18px;
+    }
+
+    .shell {
+      max-width: 1040px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .hero, .panel, .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .hero, .panel-body, .card {
+      padding: 22px;
+    }
+
+    h1, h2, p { margin-top: 0; }
+    h1 { margin-bottom: 10px; font-size: clamp(2rem, 5vw, 3.1rem); }
+    p { color: var(--muted); line-height: 1.55; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 8px 12px;
+      background: #f5faf7;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: var(--amber);
+    }
+
+    .dot.connected { background: var(--green); }
+    .dot.disconnected { background: var(--red); }
+
+    .grid, .cards {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .field, .card {
+      flex: 1 1 280px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 700;
+      font-size: 0.95rem;
+    }
+
+    input {
+      width: 100%;
+      padding: 14px 15px;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(23, 49, 38, 0.12);
+      font: inherit;
+      color: var(--text);
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 999px;
+      padding: 13px 20px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .primary { background: linear-gradient(135deg, var(--green), #167744); color: white; }
+    .secondary { background: #ecf5ef; color: var(--text); }
+    .danger { background: linear-gradient(135deg, var(--red), #b93636); color: white; }
+
+    .status {
+      font-size: 2.2rem;
+      font-weight: 800;
+      margin: 10px 0 0;
+    }
+
+    .status.on { color: var(--green); }
+    .status.off { color: var(--red); }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 72px;
+      height: 38px;
+    }
+
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute;
+      inset: 0;
+      border-radius: 999px;
+      background: #d9e7de;
+      cursor: pointer;
+      transition: 0.2s ease;
+    }
+
+    .slider::before {
+      content: "";
+      position: absolute;
+      width: 30px;
+      height: 30px;
+      left: 4px;
+      top: 4px;
+      border-radius: 50%;
+      background: white;
+      transition: 0.2s ease;
+      box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
+    }
+
+    .switch input:checked + .slider {
+      background: linear-gradient(135deg, var(--green), #167744);
+    }
+
+    .switch input:checked + .slider::before {
+      transform: translateX(34px);
+    }
+
+    .helper, .feedback, .meta {
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .feedback.success { color: #167744; }
+    .feedback.error { color: #b93636; }
+
+    @media (max-width: 680px) {
+      body { padding: 12px; }
+      .hero, .panel-body, .card { padding: 18px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <div class="badge"><span class="dot disconnected" id="brokerDot"></span><span id="brokerState">Broker disconnected</span></div>
+      <h1>Smart Device Remote Dashboard</h1>
+      <p>Host this page anywhere and control your ESP32 through MQTT from any network. The ESP32 should use the local setup page only once for WiFi and broker provisioning.</p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-body">
+        <h2>Broker Connection</h2>
+        <div class="grid">
+          <div class="field">
+            <label for="wsUrl">WebSocket Broker URL</label>
+            <input id="wsUrl" type="text" placeholder="wss://your-broker:8884/mqtt" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
+          </div>
+          <div class="field">
+            <label for="baseTopic">Base Topic</label>
+            <input id="baseTopic" type="text" placeholder="home/device1" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
+          </div>
+          <div class="field">
+            <label for="mqttUser">MQTT Username</label>
+            <input id="mqttUser" type="text" placeholder="MQTT username" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
+          </div>
+          <div class="field">
+            <label for="mqttPass">MQTT Password</label>
+            <input id="mqttPass" type="password" placeholder="MQTT password">
+          </div>
+        </div>
+        <div class="actions">
+          <button class="primary" id="connectBtn" type="button">Connect Broker</button>
+          <button class="secondary" id="disconnectBtn" type="button">Disconnect</button>
+          <button class="secondary" id="syncBtn" type="button">Request Status</button>
+        </div>
+        <p class="feedback" id="brokerFeedback">Use a WebSocket endpoint here. For HiveMQ Cloud this is usually a secure `wss://.../mqtt` endpoint, not the ESP32 TCP port.</p>
+      </div>
+    </section>
+
+    <section class="cards">
+      <article class="card">
+        <div class="meta">Device State</div>
+        <div class="status off" id="deviceState">OFF</div>
+        <p class="helper" id="stateText">Waiting for MQTT status.</p>
+        <div class="actions">
+          <label class="switch" for="deviceToggle">
+            <input id="deviceToggle" type="checkbox">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <p class="feedback" id="controlFeedback"></p>
+      </article>
+
+      <article class="card">
+        <div class="meta">Timer Schedule</div>
+        <h2>Automation</h2>
+        <div class="grid">
+          <div class="field">
+            <label for="onTime">ON Time</label>
+            <input id="onTime" type="time">
+          </div>
+          <div class="field">
+            <label for="offTime">OFF Time</label>
+            <input id="offTime" type="time">
+          </div>
+        </div>
+        <div class="actions">
+          <button class="primary" id="timerBtn" type="button">Publish Timer</button>
+        </div>
+        <p class="feedback" id="timerFeedback"></p>
+      </article>
+
+      <article class="card">
+        <div class="meta">Live Info</div>
+        <h2>Device Details</h2>
+        <p class="helper" id="availabilityText">Availability: unknown</p>
+        <p class="helper" id="ipText">IP: unknown</p>
+        <p class="helper" id="topicText">Topics: not connected</p>
+      </article>
+    </section>
+  </main>
+
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <script>
+    (function () {
+      const storageKey = "smart-device-remote-dashboard";
+      const wsUrlInput = document.getElementById("wsUrl");
+      const baseTopicInput = document.getElementById("baseTopic");
+      const mqttUserInput = document.getElementById("mqttUser");
+      const mqttPassInput = document.getElementById("mqttPass");
+      const connectBtn = document.getElementById("connectBtn");
+      const disconnectBtn = document.getElementById("disconnectBtn");
+      const syncBtn = document.getElementById("syncBtn");
+      const deviceToggle = document.getElementById("deviceToggle");
+      const onTimeInput = document.getElementById("onTime");
+      const offTimeInput = document.getElementById("offTime");
+      const timerBtn = document.getElementById("timerBtn");
+      const brokerDot = document.getElementById("brokerDot");
+      const brokerState = document.getElementById("brokerState");
+      const brokerFeedback = document.getElementById("brokerFeedback");
+      const deviceState = document.getElementById("deviceState");
+      const stateText = document.getElementById("stateText");
+      const controlFeedback = document.getElementById("controlFeedback");
+      const timerFeedback = document.getElementById("timerFeedback");
+      const availabilityText = document.getElementById("availabilityText");
+      const ipText = document.getElementById("ipText");
+      const topicText = document.getElementById("topicText");
+
+      let client = null;
+      let suppressTogglePublish = false;
+
+      function saveSettings() {
+        localStorage.setItem(storageKey, JSON.stringify({
+          wsUrl: wsUrlInput.value.trim(),
+          baseTopic: baseTopicInput.value.trim(),
+          mqttUser: mqttUserInput.value.trim(),
+          mqttPass: mqttPassInput.value
+        }));
+      }
+
+      function loadSettings() {
+        try {
+          const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
+          wsUrlInput.value = saved.wsUrl || "";
+          baseTopicInput.value = saved.baseTopic || "home/device1";
+          mqttUserInput.value = saved.mqttUser || "";
+          mqttPassInput.value = saved.mqttPass || "";
+        } catch (error) {
+          baseTopicInput.value = "home/device1";
+        }
+      }
+
+      function setBrokerState(connected, message) {
+        brokerDot.className = "dot " + (connected ? "connected" : "disconnected");
+        brokerState.textContent = connected ? "Broker connected" : "Broker disconnected";
+        if (message) {
+          brokerFeedback.textContent = message;
+        }
+      }
+
+      function topic(name) {
+        const base = (baseTopicInput.value.trim() || "home/device1").replace(/\/+$/, "");
+        return base + "/" + name;
+      }
+
+      function setDeviceState(value) {
+        const isOn = Number(value) === 1;
+        suppressTogglePublish = true;
+        deviceToggle.checked = isOn;
+        suppressTogglePublish = false;
+        deviceState.textContent = isOn ? "ON" : "OFF";
+        deviceState.className = "status " + (isOn ? "on" : "off");
+        stateText.textContent = isOn ? "Device is active." : "Device is inactive.";
+      }
+
+      function showFeedback(target, message, type) {
+        target.textContent = message || "";
+        target.className = "feedback" + (type ? " " + type : "");
+      }
+
+      function updateFromStatus(payload) {
+        if (!payload || typeof payload !== "object") {
+          return;
+        }
+
+        if ("state" in payload) {
+          setDeviceState(payload.state);
+        }
+        if (payload.on_time) {
+          onTimeInput.value = payload.on_time;
+        }
+        if (payload.off_time) {
+          offTimeInput.value = payload.off_time;
+        }
+        availabilityText.textContent = "Availability: online";
+        ipText.textContent = "IP: " + (payload.ip || "unknown");
+        topicText.textContent = "Topics: " + (payload.topic || baseTopicInput.value.trim());
+      }
+
+      function subscribeTopics() {
+        client.subscribe(topic("status"));
+        client.subscribe(topic("availability"));
+        client.publish(topic("status/get"), JSON.stringify({ request: "status" }), { qos: 0, retain: false });
+      }
+
+      connectBtn.addEventListener("click", function () {
+        saveSettings();
+
+        if (client) {
+          client.end(true);
+          client = null;
+        }
+
+        const wsUrl = wsUrlInput.value.trim();
+        if (!wsUrl) {
+          setBrokerState(false, "Enter a broker WebSocket URL first.");
+          return;
+        }
+
+        const options = {
+          username: mqttUserInput.value.trim(),
+          password: mqttPassInput.value,
+          reconnectPeriod: 3000,
+          connectTimeout: 10000,
+          clean: true,
+          clientId: "remote_dashboard_" + Math.random().toString(16).slice(2, 10)
+        };
+
+        client = mqtt.connect(wsUrl, options);
+        setBrokerState(false, "Connecting to broker...");
+
+        client.on("connect", function () {
+          setBrokerState(true, "Connected. Subscribing to device status.");
+          subscribeTopics();
+        });
+
+        client.on("message", function (receivedTopic, payload) {
+          const text = payload.toString();
+
+          if (receivedTopic === topic("availability")) {
+            availabilityText.textContent = "Availability: " + text;
+            return;
+          }
+
+          if (receivedTopic === topic("status")) {
+            try {
+              updateFromStatus(JSON.parse(text));
+            } catch (error) {
+              showFeedback(controlFeedback, "Received unreadable status payload.", "error");
+            }
+          }
+        });
+
+        client.on("reconnect", function () {
+          setBrokerState(false, "Reconnecting to broker...");
+        });
+
+        client.on("error", function (error) {
+          setBrokerState(false, error.message || "Broker connection failed.");
+        });
+
+        client.on("close", function () {
+          setBrokerState(false, "Broker connection closed.");
+        });
+      });
+
+      disconnectBtn.addEventListener("click", function () {
+        if (client) {
+          client.end(true);
+          client = null;
+        }
+        setBrokerState(false, "Disconnected from broker.");
+      });
+
+      syncBtn.addEventListener("click", function () {
+        if (!client || !client.connected) {
+          setBrokerState(false, "Connect to the broker first.");
+          return;
+        }
+        client.publish(topic("status/get"), JSON.stringify({ request: "status" }), { qos: 0, retain: false });
+        showFeedback(controlFeedback, "Status request sent.", "success");
+      });
+
+      deviceToggle.addEventListener("change", function () {
+        if (suppressTogglePublish) {
+          return;
+        }
+        if (!client || !client.connected) {
+          showFeedback(controlFeedback, "Connect to the broker first.", "error");
+          suppressTogglePublish = true;
+          deviceToggle.checked = !deviceToggle.checked;
+          suppressTogglePublish = false;
+          return;
+        }
+
+        const state = deviceToggle.checked ? 1 : 0;
+        client.publish(topic("control"), JSON.stringify({ state: state }), { qos: 1, retain: false });
+        showFeedback(controlFeedback, "Control command published.", "success");
+      });
+
+      timerBtn.addEventListener("click", function () {
+        if (!client || !client.connected) {
+          showFeedback(timerFeedback, "Connect to the broker first.", "error");
+          return;
+        }
+        if (!onTimeInput.value || !offTimeInput.value) {
+          showFeedback(timerFeedback, "Select both ON and OFF time first.", "error");
+          return;
+        }
+
+        client.publish(topic("timer/set"), JSON.stringify({
+          on_time: onTimeInput.value,
+          off_time: offTimeInput.value
+        }), { qos: 1, retain: false });
+        showFeedback(timerFeedback, "Timer command published.", "success");
+      });
+
+      loadSettings();
+      setBrokerState(false, "Enter your WebSocket broker details, then connect.");
+    })();
+  </script>
+</body>
+</html>
