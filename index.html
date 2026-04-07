@@ -259,6 +259,8 @@
         <p class="helper" id="availabilityText">Availability: unknown</p>
         <p class="helper" id="ipText">IP: unknown</p>
         <p class="helper" id="topicText">Topics: not connected</p>
+        <p class="helper" id="usageText">Total usage: 0 min</p>
+        <p class="helper" id="currentOnText">Current ON streak: 0 min</p>
       </article>
     </section>
   </main>
@@ -288,6 +290,8 @@
       const availabilityText = document.getElementById("availabilityText");
       const ipText = document.getElementById("ipText");
       const topicText = document.getElementById("topicText");
+      const usageText = document.getElementById("usageText");
+      const currentOnText = document.getElementById("currentOnText");
 
       let client = null;
       let suppressTogglePublish = false;
@@ -344,6 +348,16 @@
         target.className = "feedback" + (type ? " " + type : "");
       }
 
+      function formatDuration(ms) {
+        const totalMinutes = Math.max(0, Math.floor(Number(ms || 0) / 60000));
+        const hours = Math.floor(totalMinutes / 60);
+        const minutes = totalMinutes % 60;
+        if (hours > 0) {
+          return hours + "h " + minutes + "m";
+        }
+        return minutes + " min";
+      }
+
       function updateFromStatus(payload) {
         if (!payload || typeof payload !== "object") {
           return;
@@ -375,6 +389,8 @@
         availabilityText.textContent = "Availability: online";
         ipText.textContent = "IP: " + (payload.ip || "unknown");
         topicText.textContent = "Topics: " + (payload.topic || baseTopicInput.value.trim());
+        usageText.textContent = "Total usage: " + formatDuration(payload.usage_ms);
+        currentOnText.textContent = "Current ON streak: " + formatDuration(payload.current_on_ms);
       }
 
       function subscribeTopics() {
