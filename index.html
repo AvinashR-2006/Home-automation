@@ -21,6 +21,7 @@
     }
 
     * { box-sizing: border-box; }
+
     body {
       margin: 0;
       min-height: 100vh;
@@ -118,7 +119,6 @@
 
     .primary { background: linear-gradient(135deg, var(--green), #167744); color: white; }
     .secondary { background: #ecf5ef; color: var(--text); }
-    .danger { background: linear-gradient(135deg, var(--red), #b93636); color: white; }
 
     .status {
       font-size: 2.2rem;
@@ -137,6 +137,7 @@
     }
 
     .switch input { opacity: 0; width: 0; height: 0; }
+
     .slider {
       position: absolute;
       inset: 0;
@@ -186,7 +187,7 @@
     <section class="hero">
       <div class="badge"><span class="dot disconnected" id="brokerDot"></span><span id="brokerState">Broker disconnected</span></div>
       <h1>Smart Device Remote Dashboard</h1>
-      <p>Host this page anywhere and control your ESP32 through MQTT from any network. The ESP32 should use the local setup page only once for WiFi and broker provisioning.</p>
+      <p>Control your ESP32 from anywhere through MQTT over WebSockets.</p>
     </section>
 
     <section class="panel">
@@ -215,7 +216,7 @@
           <button class="secondary" id="disconnectBtn" type="button">Disconnect</button>
           <button class="secondary" id="syncBtn" type="button">Request Status</button>
         </div>
-        <p class="feedback" id="brokerFeedback">Use a WebSocket endpoint here. For HiveMQ Cloud this is usually a secure `wss://.../mqtt` endpoint, not the ESP32 TCP port.</p>
+        <p class="feedback" id="brokerFeedback">Use your HiveMQ WebSocket URL here.</p>
       </div>
     </section>
 
@@ -290,6 +291,8 @@
 
       let client = null;
       let suppressTogglePublish = false;
+      let pendingState = null;
+      let pendingTimer = null;
 
       function saveSettings() {
         localStorage.setItem(storageKey, JSON.stringify({
@@ -303,11 +306,12 @@
       function loadSettings() {
         try {
           const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
-          wsUrlInput.value = saved.wsUrl || "";
+          wsUrlInput.value = saved.wsUrl || "wss://c730903bbddc42a9ad9f048d4b57853f.s1.eu.hivemq.cloud:8884/mqtt";
           baseTopicInput.value = saved.baseTopic || "home/device1";
           mqttUserInput.value = saved.mqttUser || "";
           mqttPassInput.value = saved.mqttPass || "";
         } catch (error) {
+          wsUrlInput.value = "wss://c730903bbddc42a9ad9f048d4b57853f.s1.eu.hivemq.cloud:8884/mqtt";
           baseTopicInput.value = "home/device1";
         }
       }
@@ -346,14 +350,28 @@
         }
 
         if ("state" in payload) {
-          setDeviceState(payload.state);
+          const incomingState = Number(payload.state);
+
+          if (pendingState !== null) {
+            if (incomingState === pendingState) {
+              clearTimeout(pendingTimer);
+              pendingTimer = null;
+              pendingState = null;
+            } else {
+              return;
+            }
+          }
+
+          setDeviceState(incomingState);
         }
+
         if (payload.on_time) {
           onTimeInput.value = payload.on_time;
         }
         if (payload.off_time) {
           offTimeInput.value = payload.off_time;
         }
+
         availabilityText.textContent = "Availability: online";
         ipText.textContent = "IP: " + (payload.ip || "unknown");
         topicText.textContent = "Topics: " + (payload.topic || baseTopicInput.value.trim());
@@ -447,6 +465,7 @@
         if (suppressTogglePublish) {
           return;
         }
+
         if (!client || !client.connected) {
           showFeedback(controlFeedback, "Connect to the broker first.", "error");
           suppressTogglePublish = true;
@@ -456,6 +475,17 @@
         }
 
         const state = deviceToggle.checked ? 1 : 0;
+        pendingState = state;
+
+        if (pendingTimer) {
+          clearTimeout(pendingTimer);
+        }
+
+        pendingTimer = setTimeout(function () {
+          pendingState = null;
+          pendingTimer = null;
+        }, 3000);
+
         client.publish(topic("control"), JSON.stringify({ state: state }), { qos: 1, retain: false });
         showFeedback(controlFeedback, "Control command published.", "success");
       });
@@ -465,6 +495,7 @@
           showFeedback(timerFeedback, "Connect to the broker first.", "error");
           return;
         }
+
         if (!onTimeInput.value || !offTimeInput.value) {
           showFeedback(timerFeedback, "Select both ON and OFF time first.", "error");
           return;
@@ -478,7 +509,7 @@
       });
 
       loadSettings();
-      setBrokerState(false, "Enter your WebSocket broker details, then connect.");
+      setBrokerState(false, "Enter your broker details, then connect.");
     })();
   </script>
 </body>
